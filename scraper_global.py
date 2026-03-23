@@ -898,12 +898,9 @@ def capture_batch(region_batch, timestamp_str):
                 args=chrome_args,
             )
 
-            context = browser.new_context(
-                proxy={
-                    "server": proxy["server"],
-                    "username": proxy["username"],
-                    "password": proxy["password"],
-                },
+            # Direct connection (no proxy) when DECODO_USERNAME is not set
+            _use_proxy = bool(os.getenv("DECODO_USERNAME"))
+            _ctx_kwargs = dict(
                 viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
                 timezone_id=geo.timezone_id,
                 locale=geo.locale,
@@ -912,6 +909,15 @@ def capture_batch(region_batch, timestamp_str):
                 extra_http_headers={"Accept-Language": geo.accept_language},
                 user_agent=_random_user_agent(),
             )
+            if _use_proxy:
+                _ctx_kwargs["proxy"] = {
+                    "server": proxy["server"],
+                    "username": proxy["username"],
+                    "password": proxy["password"],
+                }
+            else:
+                logger.info("  [no-proxy] Running without proxy (direct connection)")
+            context = browser.new_context(**_ctx_kwargs)
             context.add_cookies(_random_cookies(".marinetraffic.com"))
 
             # Phase 1: Open all tabs and start loading in parallel

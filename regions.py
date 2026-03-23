@@ -110,8 +110,10 @@ REGIONS = {
     # ── Zoom 12: Dense chokepoints ───────────────────────────────────────
     "H": {
         "polygon": _parse_polygon("HORMUZ_POLYGON", [
-            (26.410, 56.250), (26.110, 57.100),
-            (25.240, 57.300), (24.210, 56.300),
+            # Narrowed to the actual transit channel between Musandam (Oman)
+            # and Qeshm Island (Iran), excluding Gulf anchorage areas.
+            (26.55, 56.05), (26.55, 56.65),
+            (26.05, 56.65), (26.05, 56.05),
         ]),
         "zoom": 12,
         "name": "Strait of Hormuz",

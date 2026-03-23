@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hormuz Strait Monitor — Geopolitical Intelligence Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<style>
+/* ── Reset & Theme ─────────────────────────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e14;--surface:#111820;--surface2:#1a2230;--surface3:#222d3d;
+  --border:#2a3545;--border-accent:#3a4a5e;
+  --text:#d4dce8;--text-dim:#7a8a9e;--text-bright:#f0f4f8;
+  --accent:#4da6ff;--accent-dim:#2a6cb8;
+  --tanker:#e8943a;--tanker-dim:#b86e20;
+  --cargo:#4da6ff;--cargo-dim:#2a6cb8;
+  --danger:#ef4444;--danger-dim:#991b1b;
+  --warning:#f59e0b;--warning-dim:#92400e;
+  --success:#22c55e;--success-dim:#166534;
+  --purple:#a78bfa;
+}
+html,body{height:100%;font-family:'SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:13px;color:var(--text);background:var(--bg);overflow-x:hidden;overflow-y:auto}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+.dashboard{max-width:1600px;margin:0 auto;padding:16px 20px 32px}
+
+/* ── Alert Banner ──────────────────────────────────────────────────── */
+.alert-banner{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 20px;border-radius:8px;margin-bottom:16px;
+  border:1px solid;font-size:12px;
+  animation:pulse-border 3s ease-in-out infinite;
+}
+@keyframes pulse-border{
+  0%,100%{opacity:1} 50%{opacity:.7}
+}
+.alert-banner .level{font-size:18px;font-weight:700;letter-spacing:1px}
+.alert-banner .level-sub{font-size:12px;opacity:.85;margin-top:2px}
+.alert-banner .meta{text-align:right;font-size:11px;opacity:.8}
+.alert-banner .meta .time{font-size:13px;font-weight:600}
+
+/* ── Header Row ────────────────────────────────────────────────────── */
+.header-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.header-row h1{font-size:16px;font-weight:600;color:var(--text-bright);letter-spacing:.5px}
+.header-row h1 span{color:var(--text-dim);font-weight:400;font-size:13px;margin-left:8px}
+.controls{display:flex;gap:8px;align-items:center}
+.controls select,.controls button{
+  font:inherit;font-size:11px;color:var(--text);background:var(--surface2);
+  border:1px solid var(--border);border-radius:4px;padding:5px 10px;cursor:pointer}
+.controls button:hover{border-color:var(--accent)}
+.controls button.active{background:var(--accent-dim);border-color:var(--accent);color:#fff}
+.refresh-dot{width:6px;height:6px;border-radius:50%;background:var(--success);margin-right:6px;
+  animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── KPI Cards ─────────────────────────────────────────────────────── */
+.kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px}
+.kpi-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;position:relative;overflow:hidden;
+}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.kpi-card.tanker::before{background:var(--tanker)}
+.kpi-card.cargo::before{background:var(--cargo)}
+.kpi-card.flow::before{background:var(--accent)}
+.kpi-card.oil::before{background:var(--danger)}
+.kpi-card.ratio::before{background:var(--warning)}
+.kpi-card.direction::before{background:var(--purple)}
+.kpi-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:6px}
+.kpi-value{font-size:28px;font-weight:700;color:var(--text-bright);line-height:1}
+.kpi-value .unit{font-size:13px;font-weight:400;color:var(--text-dim);margin-left:3px}
+.kpi-sub{font-size:11px;color:var(--text-dim);margin-top:5px}
+.kpi-delta{font-size:11px;margin-top:3px}
+.kpi-delta.up{color:var(--success)}.kpi-delta.down{color:var(--danger)}.kpi-delta.neutral{color:var(--text-dim)}
+
+/* ── Chart Panels ──────────────────────────────────────────────────── */
+.chart-row{display:grid;gap:12px;margin-bottom:16px}
+.chart-row.main{grid-template-columns:2fr 1fr}
+.chart-row.split{grid-template-columns:1fr 1fr}
+.chart-row.triple{grid-template-columns:1fr 1fr 1fr}
+.panel{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  padding:16px;position:relative;
+}
+.panel-title{font-size:11px;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--text-dim);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.panel-title .badge{font-size:9px;padding:2px 6px;border-radius:3px;background:var(--surface3);color:var(--text-dim)}
+.chart-container{position:relative;width:100%;height:280px}
+.chart-container.tall{height:340px}
+.chart-container.short{height:200px}
+
+/* ── Flow Gauge ────────────────────────────────────────────────────── */
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+.gauge-svg{width:220px;height:130px}
+.gauge-value{font-size:36px;font-weight:700;margin-top:-10px}
+.gauge-label{font-size:11px;color:var(--text-dim);margin-top:4px}
+.gauge-baseline{font-size:11px;color:var(--text-dim);margin-top:8px}
+.gauge-baseline strong{color:var(--text)}
+
+/* ── Scenario Matrix ───────────────────────────────────────────────── */
+.scenario-table{width:100%;border-collapse:collapse;font-size:12px}
+.scenario-table th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);
+  color:var(--text-dim);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.scenario-table td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.scenario-table tr:last-child td{border-bottom:none}
+.scenario-table tr.active{background:var(--surface2)}
+.scenario-table tr.active td:first-child{border-left:2px solid var(--accent)}
+.prob-badge{display:inline-block;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600}
+.prob-badge.low{background:#166534;color:#86efac}
+.prob-badge.mid{background:#92400e;color:#fcd34d}
+.prob-badge.high{background:#991b1b;color:#fca5a5}
+.prob-badge.extreme{background:#581c87;color:#d8b4fe}
+
+/* ── Event Timeline ────────────────────────────────────────────────── */
+.timeline-list{list-style:none;position:relative;padding-left:20px}
+.timeline-list::before{content:'';position:absolute;left:6px;top:0;bottom:0;width:1px;background:var(--border)}
+.timeline-item{position:relative;margin-bottom:12px;font-size:12px}
+.timeline-item::before{
+  content:'';position:absolute;left:-17px;top:5px;width:9px;height:9px;
+  border-radius:50%;border:2px solid var(--border);background:var(--bg);
+}
+.timeline-item.critical::before{border-color:var(--danger);background:var(--danger)}
+.timeline-item.high::before{border-color:var(--warning);background:var(--warning)}
+.timeline-item.medium::before{border-color:var(--accent);background:var(--accent)}
+.timeline-date{font-size:10px;color:var(--text-dim);margin-bottom:2px}
+.timeline-text{color:var(--text);line-height:1.4}
+
+/* ── Direction Bar ─────────────────────────────────────────────────── */
+.direction-bar{margin-top:8px}
+.dir-row{display:flex;align-items:center;margin-bottom:10px}
+.dir-label{width:60px;font-size:11px;color:var(--text-dim);flex-shrink:0}
+.dir-bar-wrap{flex:1;height:24px;background:var(--surface3);border-radius:4px;overflow:hidden;display:flex}
+.dir-seg{height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;min-width:0;transition:width .5s ease}
+.dir-seg.tanker{background:var(--tanker)}
+.dir-seg.cargo{background:var(--cargo)}
+.dir-count{width:40px;text-align:right;font-size:12px;font-weight:600;color:var(--text-bright);margin-left:8px}
+
+/* ── Methodology Note ──────────────────────────────────────────────── */
+.method-note{font-size:10px;color:var(--text-dim);line-height:1.5;margin-top:8px;
+  padding:8px 10px;background:var(--surface2);border-radius:4px;border-left:2px solid var(--border)}
+
+/* ── Oil Implication Panel ─────────────────────────────────────────── */
+.oil-metric{display:flex;align-items:baseline;justify-content:space-between;
+  padding:8px 0;border-bottom:1px solid var(--border)}
+.oil-metric:last-child{border-bottom:none}
+.oil-metric .label{font-size:11px;color:var(--text-dim)}
+.oil-metric .val{font-size:14px;font-weight:600;color:var(--text-bright)}
+.oil-metric .val.danger{color:var(--danger)}
+.oil-metric .val.warning{color:var(--warning)}
+.oil-metric .val.success{color:var(--success)}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media(max-width:1200px){
+  .kpi-row{grid-template-columns:repeat(3,1fr)}
+  .chart-row.main,.chart-row.split{grid-template-columns:1fr}
+  .chart-row.triple{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ── Loading State ─────────────────────────────────────────────────── */
+.loading{display:flex;align-items:center;justify-content:center;height:200px;color:var(--text-dim)}
+.loading::after{content:'';width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite;margin-left:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── No Data State ─────────────────────────────────────────────────── */
+.no-data{text-align:center;padding:40px;color:var(--text-dim)}
+.no-data h3{font-size:16px;color:var(--text);margin-bottom:8px}
+.no-data p{font-size:12px;line-height:1.6}
+.no-data code{background:var(--surface2);padding:2px 6px;border-radius:3px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="dashboard" id="app">
+
+  <!-- Alert Banner -->
+  <div class="alert-banner" id="alert-banner" style="background:var(--surface);border-color:var(--border)">
+    <div>
+      <div class="level" id="alert-level">LOADING...</div>
+      <div class="level-sub" id="alert-sub"></div>
+    </div>
+    <div class="meta">
+      <div class="time" id="alert-time">--</div>
+      <div id="alert-scenario"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <div class="header-row">
+    <h1>
+      <span class="refresh-dot" id="refresh-dot"></span>
+      Hormuz Strait Monitor
+      <span>/ 霍尔木兹海峡地缘政治监控</span>
+    </h1>
+    <div class="controls">
+      <select id="time-range">
+        <option value="24">24h</option>
+        <option value="72">3d</option>
+        <option value="168" selected>7d</option>
+        <option value="336">14d</option>
+        <option value="720">30d</option>
+      </select>
+      <select id="granularity">
+        <option value="hourly" selected>Hourly</option>
+        <option value="daily">Daily</option>
+      </select>
+      <button id="btn-refresh" onclick="refreshAll()">Refresh</button>
+    </div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-row">
+    <div class="kpi-card flow">
+      <div class="kpi-label">Daily Flow Estimate / 日通行量</div>
+      <div class="kpi-value" id="kpi-flow">--<span class="unit">ships/day</span></div>
+      <div class="kpi-sub">Baseline: 138 ships/day</div>
+      <div class="kpi-delta neutral" id="kpi-flow-delta"></div>
+    </div>
+    <div class="kpi-card flow">
+      <div class="kpi-label">% of Baseline / 基线占比</div>
+      <div class="kpi-value" id="kpi-pct">--<span class="unit">%</span></div>
+      <div class="kpi-sub">Flow relative to pre-conflict</div>
+      <div class="kpi-delta neutral" id="kpi-pct-change"></div>
+    </div>
+    <div class="kpi-card tanker">
+      <div class="kpi-label">Tankers / 油轮</div>
+      <div class="kpi-value" id="kpi-tankers">--</div>
+      <div class="kpi-sub" id="kpi-tankers-sub">In current observation</div>
+    </div>
+    <div class="kpi-card cargo">
+      <div class="kpi-label">Cargo / 货轮</div>
+      <div class="kpi-value" id="kpi-cargos">--</div>
+      <div class="kpi-sub" id="kpi-cargos-sub">In current observation</div>
+    </div>
+    <div class="kpi-card oil">
+      <div class="kpi-label">Implied Oil Flow / 隐含油流</div>
+      <div class="kpi-value" id="kpi-oil">--<span class="unit">mb/d</span></div>
+      <div class="kpi-sub">Baseline: 20.0 mb/d</div>
+    </div>
+    <div class="kpi-card ratio">
+      <div class="kpi-label">Supply Shock / 供给冲击</div>
+      <div class="kpi-value" id="kpi-shock">--<span class="unit">mb/d</span></div>
+      <div class="kpi-sub">Volume removed from market</div>
+    </div>
+  </div>
+
+  <!-- Main Chart Row: Time Series + Gauge -->
+  <div class="chart-row main">
+    <div class="panel">
+      <div class="panel-title">
+        Flow Rate Time Series / 流量时序
+        <span class="badge">Threshold lines = alert levels</span>
+      </div>
+      <div class="chart-container tall" id="flow-chart-wrap">
+        <canvas id="flow-chart"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Flow Gauge / 流量仪表</div>
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" viewBox="0 0 220 130" id="gauge-svg">
+          <!-- Background arc -->
+          <path d="M 20 120 A 90 90 0 0 1 200 120" fill="none" stroke="#2a3545" stroke-width="14" stroke-linecap="round"/>
+          <!-- Colored segments -->
+          <path id="gauge-critical" d="" fill="none" stroke="#ef4444" stroke-width="14" stroke-linecap="round" opacity="0.3"/>
+          <path id="gauge-severe" d="" fill="none" stroke="#d29922" stroke-width="14" stroke-linecap="round" opacity="0.3"/>
+          <path id="gauge-elevated" d="" fill="none" stroke="#e3b341" stroke-width="14" stroke-linecap="round" opacity="0.3"/>
+          <path id="gauge-watch" d="" fill="none" stroke="#4da6ff" stroke-width="14" stroke-linecap="round" opacity="0.3"/>
+          <path id="gauge-normal" d="" fill="none" stroke="#22c55e" stroke-width="14" stroke-linecap="round" opacity="0.3"/>
+          <!-- Active arc -->
+          <path id="gauge-active" d="" fill="none" stroke-width="14" stroke-linecap="round"/>
+          <!-- Needle -->
+          <circle id="gauge-needle" cx="110" cy="120" r="4" fill="var(--text-bright)"/>
+        </svg>
+        <div class="gauge-value" id="gauge-value">--%</div>
+        <div class="gauge-label">of pre-conflict baseline</div>
+        <div class="gauge-baseline">
+          <strong id="gauge-daily">--</strong> ships/day est. &nbsp;|&nbsp;
+          <strong id="gauge-oil">--</strong> mb/d implied
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Second Row: Direction + Type Breakdown + Oil Implications -->
+  <div class="chart-row triple">
+    <div class="panel">
+      <div class="panel-title">
+        Direction Breakdown / 进出湾分析
+        <span class="badge">Lat-based heuristic</span>
+      </div>
+      <div id="direction-content">
+        <div class="direction-bar">
+          <div class="dir-row">
+            <div class="dir-label">进湾 IN</div>
+            <div class="dir-bar-wrap" id="dir-in-bar"></div>
+            <div class="dir-count" id="dir-in-count">--</div>
+          </div>
+          <div class="dir-row">
+            <div class="dir-label">出湾 OUT</div>
+            <div class="dir-bar-wrap" id="dir-out-bar"></div>
+            <div class="dir-count" id="dir-out-count">--</div>
+          </div>
+        </div>
+        <div style="margin-top:16px">
+          <div class="chart-container short">
+            <canvas id="type-chart"></canvas>
+          </div>
+        </div>
+        <div class="method-note">
+          Direction classified by latitude threshold (25.7°N). Northern lane = inbound (进湾), Southern = outbound (出湾). Based on Hormuz TSS convention.
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Oil Market Implications / 油价情景映射</div>
+      <div>
+        <div class="oil-metric">
+          <span class="label">Current implied oil flow</span>
+          <span class="val" id="oil-current">-- mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Supply shock magnitude</span>
+          <span class="val danger" id="oil-shock">-- mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Pipeline alternatives (actual)</span>
+          <span class="val">1.8 mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Pipeline alternatives (theoretical max)</span>
+          <span class="val">~5.0 mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Net residual gap (UBS est.)</span>
+          <span class="val danger">-10.3 mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">SPR + IEA release capacity</span>
+          <span class="val">~2.5 mb/d</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Matched scenario</span>
+          <span class="val warning" id="oil-scenario-name">--</span>
+        </div>
+        <div class="oil-metric">
+          <span class="label">Brent price range</span>
+          <span class="val" id="oil-brent">--</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Scenario Matrix / 情景概率矩阵</div>
+      <table class="scenario-table" id="scenario-table">
+        <thead>
+          <tr><th>Scenario</th><th>Prob.</th><th>Oil</th></tr>
+        </thead>
+        <tbody id="scenario-body"></tbody>
+      </table>
+      <div style="margin-top:12px">
+        <div class="panel-title" style="margin-bottom:8px">Stationary Ratio / 停泊比</div>
+        <div class="chart-container short">
+          <canvas id="motion-chart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Third Row: Event Timeline + Tanker Specific Chart -->
+  <div class="chart-row split">
+    <div class="panel">
+      <div class="panel-title">Tanker Flow / 油轮专项流量</div>
+      <div class="chart-container" style="height:240px">
+        <canvas id="tanker-chart"></canvas>
+      </div>
+    </div>
+    <div class="panel" style="max-height:400px;overflow-y:auto">
+      <div class="panel-title">
+        Conflict Timeline / 冲突时间线
+        <span class="badge">Source: event.md</span>
+      </div>
+      <ul class="timeline-list" id="timeline-list"></ul>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────
+const API = window.location.origin;
+let flowChart, typeChart, motionChart, tankerChart;
+let autoRefreshTimer = null;
+
+// ── Fetch helpers ───────────────────────────────────────────────────
+async function fetchJSON(path) {
+  const res = await fetch(API + path);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+// ── Gauge drawing ───────────────────────────────────────────────────
+function polarToCart(cx, cy, r, angleDeg) {
+  const rad = (angleDeg - 180) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function arcPath(cx, cy, r, startDeg, endDeg) {
+  const s = polarToCart(cx, cy, r, startDeg);
+  const e = polarToCart(cx, cy, r, endDeg);
+  const large = (endDeg - startDeg) > 180 ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+}
+
+function drawGaugeSegments() {
+  // Arc from 0° to 180° (left to right)
+  // Segments: CRITICAL 0-5%, SEVERE 5-20%, ELEVATED 20-50%, WATCH 50-75%, NORMAL 75-100%
+  const cx = 110, cy = 120, r = 90;
+  const segs = [
+    { id: 'gauge-critical', from: 0, to: 5 },
+    { id: 'gauge-severe', from: 5, to: 20 },
+    { id: 'gauge-elevated', from: 20, to: 50 },
+    { id: 'gauge-watch', from: 50, to: 75 },
+    { id: 'gauge-normal', from: 75, to: 100 },
+  ];
+  segs.forEach(s => {
+    const startAngle = (s.from / 100) * 180;
+    const endAngle = (s.to / 100) * 180;
+    document.getElementById(s.id).setAttribute('d', arcPath(cx, cy, r, startAngle, endAngle));
+  });
+}
+
+function updateGauge(pct, color) {
+  const cx = 110, cy = 120, r = 90;
+  const clampedPct = Math.min(Math.max(pct, 0), 100);
+  const endAngle = (clampedPct / 100) * 180;
+  const active = document.getElementById('gauge-active');
+  active.setAttribute('d', arcPath(cx, cy, r, 0, Math.max(endAngle, 1)));
+  active.setAttribute('stroke', color);
+
+  // Move needle dot
+  const needle = document.getElementById('gauge-needle');
+  const pos = polarToCart(cx, cy, r, endAngle);
+  needle.setAttribute('cx', pos.x);
+  needle.setAttribute('cy', pos.y);
+  needle.setAttribute('fill', color);
+}
+
+// ── Direction bars ──────────────────────────────────────────────────
+function renderDirectionBars(direction) {
+  const inb = direction.inbound;
+  const outb = direction.outbound;
+
+  function makeBar(data, containerId) {
+    const total = data.total || 1;
+    const tankerPct = (data.tanker / total * 100).toFixed(0);
+    const cargoPct = (data.cargo / total * 100).toFixed(0);
+    const el = document.getElementById(containerId);
+    el.innerHTML = '';
+    if (data.total === 0) {
+      el.innerHTML = '<div style="width:100%;text-align:center;font-size:10px;color:var(--text-dim);line-height:24px">No vessels</div>';
+      return;
+    }
+    const tSeg = document.createElement('div');
+    tSeg.className = 'dir-seg tanker';
+    tSeg.style.width = tankerPct + '%';
+    tSeg.textContent = data.tanker > 0 ? `${data.tanker}T` : '';
+    const cSeg = document.createElement('div');
+    cSeg.className = 'dir-seg cargo';
+    cSeg.style.width = (100 - parseInt(tankerPct)) + '%';
+    cSeg.textContent = data.cargo > 0 ? `${data.cargo}C` : '';
+    el.appendChild(tSeg);
+    el.appendChild(cSeg);
+  }
+
+  makeBar(inb, 'dir-in-bar');
+  makeBar(outb, 'dir-out-bar');
+  document.getElementById('dir-in-count').textContent = inb.total;
+  document.getElementById('dir-out-count').textContent = outb.total;
+}
+
+// ── Scenario table ──────────────────────────────────────────────────
+function renderScenarios(scenarios, matchedId) {
+  const tbody = document.getElementById('scenario-body');
+  tbody.innerHTML = '';
+  scenarios.forEach(s => {
+    const tr = document.createElement('tr');
+    if (s.id === matchedId) tr.className = 'active';
+    const probClass = s.probability.includes('低') ? 'low' :
+                      s.probability.includes('高') ? 'high' :
+                      s.probability.includes('极') ? 'extreme' : 'mid';
+    tr.innerHTML = `
+      <td style="font-size:11px"><strong>${s.name}</strong><br><span style="color:var(--text-dim);font-size:10px">${s.name_en}</span></td>
+      <td><span class="prob-badge ${probClass}">${s.probability}</span></td>
+      <td style="font-weight:600;font-size:11px">${s.oil_price}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Event timeline ──────────────────────────────────────────────────
+function renderTimeline(events) {
+  const list = document.getElementById('timeline-list');
+  list.innerHTML = '';
+  // Show in reverse chronological order
+  const sorted = [...events].sort((a, b) => b.date.localeCompare(a.date));
+  sorted.forEach(ev => {
+    const li = document.createElement('li');
+    li.className = `timeline-item ${ev.severity}`;
+    li.innerHTML = `
+      <div class="timeline-date">${ev.date}</div>
+      <div class="timeline-text">${ev.event}</div>
+    `;
+    list.appendChild(li);
+  });
+}
+
+// ── Charts ──────────────────────────────────────────────────────────
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: { labels: { color: '#7a8a9e', font: { size: 10 }, boxWidth: 10, padding: 8 } },
+  },
+  scales: {
+    x: { ticks: { color: '#7a8a9e', font: { size: 9 } }, grid: { color: '#1a2230' } },
+    y: { ticks: { color: '#7a8a9e', font: { size: 9 } }, grid: { color: '#1a2230' } },
+  },
+};
+
+function createFlowChart(series, thresholds) {
+  const ctx = document.getElementById('flow-chart').getContext('2d');
+  if (flowChart) flowChart.destroy();
+
+  const labels = series.map(s => s.timestamp);
+  const totalData = series.map(s => s.avg_total);
+  const tankerData = series.map(s => s.avg_tankers);
+
+  // Threshold annotation lines
+  const thresholdLines = thresholds.map(t => ({
+    label: t.label + ` (${t.pct}%)`,
+    data: labels.map(() => (t.pct / 100) * (138 / 5)),  // Convert baseline% to observation count
+    borderColor: t.color,
+    borderWidth: 1,
+    borderDash: [4, 4],
+    pointRadius: 0,
+    fill: false,
+    order: 10,
+  }));
+
+  flowChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Total Ships (Observed)',
+          data: totalData,
+          borderColor: '#4da6ff',
+          backgroundColor: 'rgba(77,166,255,0.1)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 1.5,
+          order: 1,
+        },
+        {
+          label: 'Tankers',
+          data: tankerData,
+          borderColor: '#e8943a',
+          backgroundColor: 'rgba(232,148,58,0.08)',
+          borderWidth: 1.5,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 1,
+          order: 2,
+        },
+        ...thresholdLines,
+      ],
+    },
+    options: {
+      ...chartDefaults,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        ...chartDefaults.plugins,
+        tooltip: {
+          callbacks: {
+            afterBody: function(items) {
+              if (!items.length) return '';
+              const idx = items[0].dataIndex;
+              const s = series[idx];
+              return `\nDaily est: ~${s.daily_estimate} ships/day\nFlow: ${s.flow_pct}% of baseline\nImplied oil: ${s.implied_oil_mbd} mb/d`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'MMM d, HH:mm' },
+          ticks: { color: '#7a8a9e', font: { size: 9 }, maxTicksLimit: 12 },
+          grid: { color: '#1a2230' },
+        },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Ships (per observation)', color: '#7a8a9e', font: { size: 10 } },
+          ticks: { color: '#7a8a9e', font: { size: 9 } },
+          grid: { color: '#1a2230' },
+        },
+      },
+    },
+  });
+}
+
+function createTypeChart(ships) {
+  const ctx = document.getElementById('type-chart').getContext('2d');
+  if (typeChart) typeChart.destroy();
+
+  typeChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Moving Tankers', 'Stationary Tankers', 'Moving Cargo', 'Stationary Cargo'],
+      datasets: [{
+        data: [ships.moving_tankers, ships.stationary_tankers, ships.moving_cargos, ships.stationary_cargos],
+        backgroundColor: ['#e8943a', '#b86e20', '#4da6ff', '#2a6cb8'],
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { color: '#7a8a9e', font: { size: 9 }, boxWidth: 8, padding: 6 } },
+      },
+    },
+  });
+}
+
+function createMotionChart(series) {
+  const ctx = document.getElementById('motion-chart').getContext('2d');
+  if (motionChart) motionChart.destroy();
+
+  // Show ratio of stationary ships over time (high = blockade signal)
+  const labels = series.map(s => s.timestamp);
+  const total = series.map(s => s.avg_total || 1);
+  const statRatio = series.map((s, i) => {
+    const t = total[i];
+    return t > 0 ? Math.round((s.avg_stationary / t) * 100) : 0;
+  });
+
+  motionChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Stationary %',
+        data: statRatio,
+        backgroundColor: statRatio.map(v => v > 60 ? 'rgba(239,68,68,0.6)' : v > 40 ? 'rgba(245,158,11,0.6)' : 'rgba(34,197,94,0.4)'),
+        borderRadius: 2,
+      }],
+    },
+    options: {
+      ...chartDefaults,
+      plugins: {
+        ...chartDefaults.plugins,
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'MMM d, HH:mm' },
+          ticks: { color: '#7a8a9e', font: { size: 8 }, maxTicksLimit: 8 },
+          grid: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          max: 100,
+          title: { display: true, text: '%', color: '#7a8a9e', font: { size: 9 } },
+          ticks: { color: '#7a8a9e', font: { size: 8 } },
+          grid: { color: '#1a2230' },
+        },
+      },
+    },
+  });
+}
+
+function createTankerChart(series) {
+  const ctx = document.getElementById('tanker-chart').getContext('2d');
+  if (tankerChart) tankerChart.destroy();
+
+  const labels = series.map(s => s.timestamp);
+  const tankerData = series.map(s => s.avg_tankers);
+  const impliedOil = series.map(s => s.implied_oil_mbd);
+
+  tankerChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Tankers (observed)',
+          data: tankerData,
+          borderColor: '#e8943a',
+          backgroundColor: 'rgba(232,148,58,0.15)',
+          borderWidth: 2,
+          fill: true,
+          tension: 0.3,
+          pointRadius: 1.5,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Implied Oil Flow (mb/d)',
+          data: impliedOil,
+          borderColor: '#ef4444',
+          borderWidth: 1.5,
+          borderDash: [3, 3],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 1,
+          yAxisID: 'y1',
+        },
+      ],
+    },
+    options: {
+      ...chartDefaults,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'MMM d, HH:mm' },
+          ticks: { color: '#7a8a9e', font: { size: 9 }, maxTicksLimit: 12 },
+          grid: { color: '#1a2230' },
+        },
+        y: {
+          beginAtZero: true,
+          position: 'left',
+          title: { display: true, text: 'Tankers', color: '#e8943a', font: { size: 10 } },
+          ticks: { color: '#7a8a9e', font: { size: 9 } },
+          grid: { color: '#1a2230' },
+        },
+        y1: {
+          beginAtZero: true,
+          position: 'right',
+          title: { display: true, text: 'mb/d', color: '#ef4444', font: { size: 10 } },
+          ticks: { color: '#7a8a9e', font: { size: 9 } },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+}
+
+// ── Update functions ────────────────────────────────────────────────
+function updateBanner(flow) {
+  const banner = document.getElementById('alert-banner');
+  banner.style.borderColor = flow.alert_color;
+  banner.style.background = flow.alert_color + '15';
+  document.getElementById('alert-level').textContent = flow.alert_level;
+  document.getElementById('alert-level').style.color = flow.alert_color;
+  document.getElementById('alert-sub').textContent = `${flow.alert_label} — ${flow.alert_label_en}`;
+}
+
+function updateKPIs(data) {
+  const flow = data.flow;
+  const ships = data.ships;
+
+  document.getElementById('kpi-flow').innerHTML =
+    `${flow.daily_estimate}<span class="unit">ships/day</span>`;
+  document.getElementById('kpi-pct').innerHTML =
+    `${flow.flow_pct_of_baseline}<span class="unit">%</span>`;
+  document.getElementById('kpi-pct').style.color =
+    flow.flow_pct_of_baseline < 10 ? 'var(--danger)' :
+    flow.flow_pct_of_baseline < 30 ? 'var(--warning)' : 'var(--text-bright)';
+  document.getElementById('kpi-tankers').textContent = ships.tankers;
+  document.getElementById('kpi-tankers-sub').textContent =
+    `${ships.moving_tankers} moving, ${ships.stationary_tankers} stationary`;
+  document.getElementById('kpi-cargos').textContent = ships.cargos;
+  document.getElementById('kpi-cargos-sub').textContent =
+    `${ships.moving_cargos} moving, ${ships.stationary_cargos} stationary`;
+  document.getElementById('kpi-oil').innerHTML =
+    `${flow.implied_oil_flow_mbd}<span class="unit">mb/d</span>`;
+  document.getElementById('kpi-oil').style.color =
+    flow.implied_oil_flow_mbd < 2 ? 'var(--danger)' :
+    flow.implied_oil_flow_mbd < 10 ? 'var(--warning)' : 'var(--text-bright)';
+  document.getElementById('kpi-shock').innerHTML =
+    `${flow.oil_supply_shock_mbd}<span class="unit">mb/d</span>`;
+  document.getElementById('kpi-shock').style.color = 'var(--danger)';
+
+  // Delta
+  if (data.delta) {
+    const d = data.delta.total;
+    const cls = d > 0 ? 'up' : d < 0 ? 'down' : 'neutral';
+    const sign = d > 0 ? '+' : '';
+    document.getElementById('kpi-flow-delta').className = `kpi-delta ${cls}`;
+    document.getElementById('kpi-flow-delta').textContent = `${sign}${d} vs previous`;
+  }
+
+  // Time
+  const ts = new Date(data.captured_at);
+  document.getElementById('alert-time').textContent = ts.toLocaleString('zh-CN', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+  });
+
+  // Oil implications
+  document.getElementById('oil-current').textContent = `${flow.implied_oil_flow_mbd} mb/d`;
+  document.getElementById('oil-current').className = `val ${flow.implied_oil_flow_mbd < 5 ? 'danger' : 'warning'}`;
+  document.getElementById('oil-shock').textContent = `-${flow.oil_supply_shock_mbd} mb/d`;
+
+  // Scenario
+  if (data.matched_scenario) {
+    document.getElementById('oil-scenario-name').textContent = data.matched_scenario.name;
+    document.getElementById('oil-brent').textContent = data.matched_scenario.oil_price;
+    document.getElementById('alert-scenario').textContent =
+      `Scenario: ${data.matched_scenario.name_en} — ${data.matched_scenario.oil_price}`;
+  }
+
+  // Gauge
+  updateGauge(Math.min(flow.flow_pct_of_baseline, 100), flow.alert_color);
+  document.getElementById('gauge-value').textContent = flow.flow_pct_of_baseline + '%';
+  document.getElementById('gauge-value').style.color = flow.alert_color;
+  document.getElementById('gauge-daily').textContent = flow.daily_estimate;
+  document.getElementById('gauge-oil').textContent = flow.implied_oil_flow_mbd;
+}
+
+// ── Main data fetchers ──────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const data = await fetchJSON('/api/hormuz/status');
+    if (data.status === 'no_data') {
+      document.getElementById('app').innerHTML = `
+        <div class="no-data">
+          <h3>No Hormuz Data Available</h3>
+          <p>Run the scraper for the Hormuz region first:</p>
+          <p><code>python scraper_global.py --regions H</code></p>
+          <p style="margin-top:12px">Then refresh this page.</p>
+        </div>`;
+      return null;
+    }
+    updateBanner(data.flow);
+    updateKPIs(data);
+    renderDirectionBars(data.direction);
+    createTypeChart(data.ships);
+    return data;
+  } catch (e) {
+    console.error('Failed to load status:', e);
+    return null;
+  }
+}
+
+async function loadFlowHistory() {
+  try {
+    const hours = document.getElementById('time-range').value;
+    const gran = document.getElementById('granularity').value;
+    const data = await fetchJSON(`/api/hormuz/flow?hours=${hours}&granularity=${gran}`);
+    if (data.series.length > 0) {
+      createFlowChart(data.series, data.alert_thresholds);
+      createMotionChart(data.series);
+      createTankerChart(data.series);
+    }
+  } catch (e) {
+    console.error('Failed to load flow history:', e);
+  }
+}
+
+async function loadContext() {
+  try {
+    const data = await fetchJSON('/api/hormuz/context');
+    renderTimeline(data.key_events);
+    // Scenarios will be rendered after status loads (need matched scenario ID)
+    window._scenarios = data.scenarios;
+  } catch (e) {
+    console.error('Failed to load context:', e);
+  }
+}
+
+async function refreshAll() {
+  document.getElementById('btn-refresh').textContent = 'Loading...';
+  try {
+    const [statusData] = await Promise.all([loadStatus(), loadFlowHistory()]);
+    if (statusData && window._scenarios) {
+      renderScenarios(window._scenarios, statusData.matched_scenario?.id);
+    }
+  } finally {
+    document.getElementById('btn-refresh').textContent = 'Refresh';
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────
+(async function init() {
+  drawGaugeSegments();
+
+  // Load context first (static data), then dynamic data
+  await loadContext();
+  await refreshAll();
+
+  // Auto-refresh every 2 minutes
+  autoRefreshTimer = setInterval(refreshAll, 120_000);
+
+  // Re-fetch when controls change
+  document.getElementById('time-range').addEventListener('change', loadFlowHistory);
+  document.getElementById('granularity').addEventListener('change', loadFlowHistory);
+})();
+</script>
+</body>
+</html>

@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from regions import REGIONS
 from update_database import _SCHEMA_SQL
+from hormuz_monitor import router as hormuz_router, set_db_connector
 
 load_dotenv()
 
@@ -104,6 +105,10 @@ CREATE INDEX IF NOT EXISTS idx_alerts_region
 CREATE INDEX IF NOT EXISTS idx_alerts_unacked
     ON alerts (acknowledged_at) WHERE acknowledged_at IS NULL;
 """
+
+
+app.include_router(hormuz_router)
+set_db_connector(get_conn)
 
 
 @app.on_event("startup")
@@ -936,6 +941,14 @@ def serve_dashboard():
     if not index.exists():
         raise HTTPException(404, "Dashboard not found. Create dashboard/index.html")
     return FileResponse(index, media_type="text/html")
+
+
+@app.get("/hormuz")
+def serve_hormuz_dashboard():
+    page = dashboard_dir / "hormuz.html"
+    if not page.exists():
+        raise HTTPException(404, "Hormuz dashboard not found")
+    return FileResponse(page, media_type="text/html")
 
 
 if dashboard_dir.exists():
